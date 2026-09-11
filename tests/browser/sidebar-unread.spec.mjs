@@ -151,6 +151,14 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   await expect(cue(page, "below")).toHaveText("Unread");
   await expect(cue(page, "below")).toHaveAccessibleName("Unread below");
   await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
+  const transitionProperties = await cue(page, "below").evaluate((el) =>
+    getComputedStyle(el).transitionProperty.split(", "),
+  );
+  expect(transitionProperties).toEqual([
+    "background-color",
+    "color",
+    "border-color",
+  ]);
   await expect(cue(page, "above")).toHaveCount(0);
   // Keep actionable DMs below while moving only ordinary unread above: priority
   // is derived from the destinations on each edge, not from the whole roster.
