@@ -111,6 +111,20 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   } finally {
     app.relay.releaseEose("alpha");
   }
+  const ordinary = row(page, "alpha").getByRole("img", {
+    name: /observed unread messages/,
+  });
+  const directed = row(page, "dm-090").getByRole("img");
+  await expect(ordinary).toHaveAttribute("data-attention", "false");
+  await expect(ordinary).toHaveText("");
+  await expect(ordinary).toHaveCSS("width", "6px");
+  await expect(row(page, "alpha").locator("span").first()).toHaveCSS(
+    "font-weight",
+    "650",
+  );
+  await expect(directed).toHaveAttribute("data-attention", "true");
+  await expect(directed).toHaveText("1");
+  await expect(directed).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(row(page, "dm-090").getByRole("img")).toHaveCount(1);
   await expect(cue(page, "below")).toBeVisible();
   await expect(cue(page, "above")).toHaveCount(0);

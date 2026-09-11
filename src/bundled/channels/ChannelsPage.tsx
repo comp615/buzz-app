@@ -409,7 +409,7 @@ function ChannelWorkspace({
                     onClick={() => select(channel.id)}
                   >
                     <Icon size={17} />
-                    <span>{channel.name}</span>
+                    <span className={styles.channelLabel}>{channel.name}</span>
                     <UnreadBadge session={queries} channelId={channel.id} />
                   </button>
                 );

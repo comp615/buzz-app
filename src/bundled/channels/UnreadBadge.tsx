@@ -25,6 +25,7 @@ export function UnreadBadge({
   const count = snapshot.observedCount;
   const manual = snapshot.manual !== "none";
   if (!manual && !count) return null;
+  const attention = (snapshot.attentionCount ?? 0) > 0;
   const label = manual
     ? `Marked unread${snapshot.manual === "local-only" ? " on this device only" : ""}`
     : `${count} observed unread messages${snapshot.freshness === "stale" ? "; may be out of date" : ""}. Not an exact total.`;
@@ -35,9 +36,9 @@ export function UnreadBadge({
       role="img"
       aria-label={label}
       title={label}
-      data-attention={!!snapshot.attentionCount}
+      data-attention={attention}
     >
-      {manual ? "•" : (count ?? 0) > 99 ? "99+" : count}
+      {attention ? (manual ? "•" : (count ?? 0) > 99 ? "99+" : count) : null}
     </span>
   );
 }
