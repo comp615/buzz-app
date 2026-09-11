@@ -56,6 +56,9 @@ test("thread buttons show observed unread independently, clear only after readin
   await expect(
     popover.getByRole("button", { name: /Open unread thread from/ }),
   ).toHaveCount(1);
+  const queries = () =>
+    app.report.queries.filter(({ filter }) => filter.depth_limit);
+  expect(queries()).toHaveLength(0); // Merely displaying buttons never fetches threads.
   await page.keyboard.press("Escape");
   await alpha.focus();
   await alpha.press("Enter");
@@ -73,9 +76,6 @@ test("thread buttons show observed unread independently, clear only after readin
   ).toBeVisible();
   await page.getByRole("button", { name: "Close thread", exact: true }).click();
   await expect(alpha).toBeFocused();
-  const queries = () =>
-    app.report.queries.filter(({ filter }) => filter.depth_limit);
-  expect(queries()).toHaveLength(0); // Merely displaying buttons never fetches threads.
   const rect = await first.boundingBox();
   await first.hover();
   expect(await first.boundingBox()).toEqual(rect);
