@@ -12,13 +12,21 @@ const sidebar = (page) =>
 const list = (page) =>
   page.getByRole("navigation", { name: "Subscribed channels" });
 const cue = (page, edge) =>
-  sidebar(page).getByRole("button", { name: `Unread ${edge}`, exact: true });
+  sidebar(page).locator(`button[data-edge="${edge}"]`);
 const row = (page, id) =>
   list(page).locator(`button[data-channel-id="${id.toLowerCase()}"]`);
 const scroll = (page, top) =>
   list(page).evaluate((el, top) => {
     el.scrollTop = top;
   }, top);
+const scrollRowAbove = (page, id) =>
+  row(page, id).evaluate((el) => {
+    const viewport = el.closest("nav");
+    if (!viewport) throw new Error("Channel row is outside the channel list");
+    const rowRect = el.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    viewport.scrollTop += rowRect.bottom - viewportRect.top + 1;
+  });
 const inView = (page, id) =>
   row(page, id).evaluate((el) => {
     const rect = el.getBoundingClientRect();
@@ -127,7 +135,19 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   await expect(directed).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(row(page, "dm-090").getByRole("img")).toHaveCount(1);
   await expect(cue(page, "below")).toBeVisible();
+  await expect(cue(page, "below")).toHaveText("2 unread");
+  await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
   await expect(cue(page, "above")).toHaveCount(0);
+  // Keep actionable DMs below while moving only ordinary unread above: priority
+  // is derived from the destinations on each edge, not from the whole roster.
+  await scrollRowAbove(page, "alpha");
+  await expect.poll(() => inView(page, "alpha")).toBe(false);
+  await expect(cue(page, "above")).toBeVisible();
+  await expect(cue(page, "above")).toHaveText("1 unread");
+  await expect(cue(page, "above")).toHaveAttribute("data-attention", "false");
+  await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
+  await scroll(page, 0);
+  await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
   await scroll(page, 1800);
   await expect(cue(page, "above")).toBeVisible();
   await expect(cue(page, "below")).toBeVisible();
@@ -324,27 +344,32 @@ test("session changes discard the previous sidebar targets and manual unread sti
   }
 });
 
-test("attention badge retains its channel row color in both modes", async ({
+test("DM attention badge uses semantic primary colors in both modes", async ({
   page,
   app,
 }) => {
   await open(page, app);
-  const channel = row(page, "dm-030");
-  const badge = channel.locator("[data-channel-unread]");
-  await expect(badge).toBeAttached();
-  // Use the actual rendered badge and its production CSS; only select the
-  // attention presentation state, independently of mention admission behavior.
-  await badge.evaluate((element) => {
-    element.dataset.attention = "true";
-  });
+  const badge = row(page, "dm-030").locator("[data-channel-unread]");
+  await expect(badge).toHaveAttribute("data-attention", "true");
   for (const mode of ["light", "dark"]) {
     await page.evaluate((mode) => {
       document.documentElement.dataset.colorMode = mode;
     }, mode);
-    const color = await channel.evaluate(
-      (element) => getComputedStyle(element).color,
-    );
-    await expect(badge).toHaveCSS("color", color);
-    await expect(badge).toHaveCSS("outline-color", color);
+    const colors = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = root.getPropertyValue("--primary");
+      probe.style.color = root.getPropertyValue("--on-primary");
+      document.body.append(probe);
+      const style = getComputedStyle(probe);
+      const colors = {
+        primary: style.backgroundColor,
+        onPrimary: style.color,
+      };
+      probe.remove();
+      return colors;
+    });
+    await expect(badge).toHaveCSS("background-color", colors.primary);
+    await expect(badge).toHaveCSS("color", colors.onPrimary);
   }
 });

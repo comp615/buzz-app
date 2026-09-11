@@ -1,7 +1,12 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
-test.use({ productionBroker: true, readState: true, threadUnread: true });
+test.use({
+  productionBroker: true,
+  readState: true,
+  threadUnread: true,
+  largeSidebar: true,
+});
 test("thread buttons show observed unread independently, clear only after reading, and expose hover/focus affordance", async ({
   page,
   app,
@@ -32,6 +37,33 @@ test("thread buttons show observed unread independently, clear only after readin
   await expect(dot(first)).toBeVisible();
   await expect(dot(other)).toBeVisible();
   await expect(broadcast).toHaveAccessibleName(/Observed unread replies/);
+  const alpha = page.locator('button[data-channel-id="alpha"]');
+  const activity = alpha.getByRole("img", { name: /unread threads?/ });
+  await expect(activity).toBeVisible();
+  await expect(alpha.locator("span").first()).toHaveCSS("font-weight", "650");
+  await alpha.hover();
+  const popover = page.getByRole("dialog", { name: "Activity in Alpha" });
+  await expect(popover).toBeVisible();
+  await expect(
+    popover.getByRole("button", { name: /Open unread thread from/ }),
+  ).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await alpha.focus();
+  await alpha.press("Enter");
+  await expect(popover).toBeVisible();
+  const item = popover
+    .getByRole("button", {
+      name: /Open unread thread from/,
+    })
+    .first();
+  await item.focus();
+  await expect(item).toBeFocused();
+  await item.press("Enter");
+  await expect(
+    page.getByRole("complementary", { name: "Thread", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close thread", exact: true }).click();
+  await expect(alpha).toBeFocused();
   const queries = () =>
     app.report.queries.filter(({ filter }) => filter.depth_limit);
   expect(queries()).toHaveLength(0); // Merely displaying buttons never fetches threads.

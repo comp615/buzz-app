@@ -36,6 +36,8 @@ export type {
 export type {
   UnreadCapability,
   UnreadSnapshot,
+  ThreadActivityItem,
+  ThreadActivitySnapshot,
   ReadingHandle,
 } from "../features/relay/unread";
 export type { ReadTarget } from "../features/relay/read-state-model";

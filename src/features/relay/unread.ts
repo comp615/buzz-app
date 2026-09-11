@@ -24,6 +24,23 @@ export type UnreadSnapshot = Readonly<{
   manual: "none" | "local-only" | "remote";
   error?: string | undefined;
 }>;
+export type ThreadActivityItem = Readonly<{
+  channelId: string;
+  rootId: string;
+  latestMessageId: string;
+  authorId: string;
+  createdAt: number;
+  preview: string;
+  unreadCount: number;
+}>;
+export type ThreadActivitySnapshot = Readonly<{
+  channelId: string;
+  /** null means activity evidence is unknown or access is denied. */
+  items: readonly ThreadActivityItem[] | null;
+  coverage: "unknown" | "observed";
+  freshness: "unknown" | "observed" | "stale";
+  error?: string | undefined;
+}>;
 export type ReadingHandle = Readonly<{
   /** Only message IDs actually visible to the active consumer; no caller timestamps. */
   observe(messageIds: readonly string[]): Promise<void>;
@@ -32,6 +49,8 @@ export type ReadingHandle = Readonly<{
 export interface UnreadCapability {
   snapshot(target: ReadTarget): UnreadSnapshot;
   subscribe(target: ReadTarget, listener: () => void): () => void;
+  activity(channelId: string): ThreadActivitySnapshot;
+  subscribeActivity(channelId: string, listener: () => void): () => void;
   sync(): ReadSyncSnapshot;
   subscribeSync(listener: () => void): () => void;
   ensure(): Promise<void>;
@@ -78,6 +97,9 @@ export function createUnread({
   const listeners = new Map<string, Set<() => void>>();
   const snapshots = new Map<string, UnreadSnapshot>();
   const dirty = new Set<string>();
+  const activityListeners = new Map<string, Set<() => void>>();
+  const activitySnapshots = new Map<string, ThreadActivitySnapshot>();
+  const activityDirty = new Set<string>();
   const handles = new Set<() => void>();
   let bytes = 0;
   const allowed = (id: string) =>
@@ -154,6 +176,32 @@ export function createUnread({
           root(event) === target.rootId))
     );
   }
+  const unreadEvidence = (
+    evidence: Evidence,
+    channelId: string,
+    state: ReturnType<typeof reads.state>,
+  ) => {
+    const { event, rootId } = evidence;
+    if (event.pubkey === viewer) return false;
+    const frontier = effectiveFrontier(
+      state,
+      `msg:${event.id}`,
+      channelId,
+      rootId,
+    );
+    const forced =
+      overrideActive(state.overrides[`msg:${event.id}`], frontier) ||
+      overrideActive(
+        state.overrides[channelId],
+        effectiveFrontier(state, channelId),
+      ) ||
+      (rootId !== undefined &&
+        overrideActive(
+          state.overrides[`thread:${rootId}`],
+          effectiveFrontier(state, `thread:${rootId}`, channelId),
+        ));
+    return frontier === undefined || event.created_at > frontier || forced;
+  };
   function compute(target: ReadTarget): UnreadSnapshot {
     const key = targetKey(target);
     const accessible =
@@ -188,31 +236,19 @@ export function createUnread({
         .channels.find((channel) => channel.id === target.channelId)
         ?.channelType === "dm";
     indexEvidence();
-    for (const { event, rootId, mentioned } of byChannel.get(
-      target.channelId,
-    ) ?? []) {
-      if (event.pubkey === viewer || !inTarget(event, target)) continue;
-      const frontier = effectiveFrontier(
-        state,
-        `msg:${event.id}`,
-        target.channelId,
-        rootId,
-      );
-      const forced =
-        overrideActive(state.overrides[`msg:${event.id}`], frontier) ||
-        overrideActive(
-          state.overrides[target.channelId],
-          effectiveFrontier(state, target.channelId),
-        ) ||
-        (rootId !== undefined &&
-          overrideActive(
-            state.overrides[`thread:${rootId}`],
-            effectiveFrontier(state, `thread:${rootId}`, target.channelId),
-          ));
-      if (frontier !== undefined && event.created_at <= frontier && !forced)
+    for (const evidence of byChannel.get(target.channelId) ?? []) {
+      const { event, rootId, mentioned } = evidence;
+      if (
+        !inTarget(event, target) ||
+        !unreadEvidence(evidence, target.channelId, state)
+      )
         continue;
       count++;
-      if (dm || mentioned || (rootId && participants.has(rootId))) attention++;
+      const broadcast = event.tags.some(
+        ([name, value]) => name === "broadcast" && value === "1",
+      );
+      if (dm || mentioned || broadcast || (rootId && participants.has(rootId)))
+        attention++;
     }
     const manual = reads.localUnread(key)
       ? "local-only"
@@ -239,6 +275,102 @@ export function createUnread({
     a.freshness === b.freshness &&
     a.manual === b.manual &&
     a.error === b.error;
+  function computeActivity(channelId: string): ThreadActivitySnapshot {
+    if (!allowed(channelId) || !known.has(channelId))
+      return Object.freeze({
+        channelId,
+        items: null,
+        coverage: "unknown",
+        freshness: "unknown",
+      });
+    indexEvidence();
+    const state = reads.state();
+    const grouped = new Map<string, ThreadActivityItem>();
+    for (const evidence of byChannel.get(channelId) ?? []) {
+      const { event, rootId, mentioned } = evidence;
+      const broadcast = event.tags.some(
+        ([name, value]) => name === "broadcast" && value === "1",
+      );
+      if (
+        !rootId ||
+        (!mentioned && !broadcast && !participants.has(rootId)) ||
+        !unreadEvidence(evidence, channelId, state)
+      )
+        continue;
+      const current = grouped.get(rootId);
+      if (!current) {
+        grouped.set(
+          rootId,
+          Object.freeze({
+            channelId,
+            rootId,
+            latestMessageId: event.id,
+            authorId: event.pubkey,
+            createdAt: event.created_at,
+            preview: event.content,
+            unreadCount: 1,
+          }),
+        );
+        continue;
+      }
+      const latest =
+        event.created_at > current.createdAt ||
+        (event.created_at === current.createdAt &&
+          event.id < current.latestMessageId);
+      grouped.set(
+        rootId,
+        Object.freeze({
+          channelId,
+          rootId,
+          latestMessageId: latest ? event.id : current.latestMessageId,
+          authorId: latest ? event.pubkey : current.authorId,
+          createdAt: latest ? event.created_at : current.createdAt,
+          preview: latest ? event.content : current.preview,
+          unreadCount: current.unreadCount + 1,
+        }),
+      );
+    }
+    return Object.freeze({
+      channelId,
+      items: Object.freeze(
+        [...grouped.values()].sort(
+          (a, b) =>
+            b.createdAt - a.createdAt ||
+            a.latestMessageId.localeCompare(b.latestMessageId),
+        ),
+      ),
+      coverage: "observed",
+      freshness,
+      ...(error ? { error } : {}),
+    });
+  }
+  const equalActivity = (
+    a: ThreadActivitySnapshot,
+    b: ThreadActivitySnapshot,
+  ) =>
+    a.coverage === b.coverage &&
+    a.freshness === b.freshness &&
+    a.error === b.error &&
+    ((a.items === null && b.items === null) ||
+      (a.items !== null &&
+        b.items !== null &&
+        a.items.length === b.items.length &&
+        a.items.every((item, index) => {
+          const other = b.items?.[index];
+          return (
+            item.rootId === other?.rootId &&
+            item.latestMessageId === other.latestMessageId &&
+            item.unreadCount === other.unreadCount
+          );
+        })));
+  function activity(channelId: string) {
+    const previous = activitySnapshots.get(channelId);
+    if (previous && !activityDirty.delete(channelId)) return previous;
+    const value = computeActivity(channelId);
+    if (previous && equalActivity(previous, value)) return previous;
+    activitySnapshots.set(channelId, value);
+    return value;
+  }
   function snapshot(target: ReadTarget) {
     const key = keyFor(target),
       previous = snapshots.get(key);
@@ -257,9 +389,20 @@ export function createUnread({
     snapshots.set(key, value);
     return value;
   }
+  function addActivityListener(channelId: string, listener: () => void) {
+    activity(channelId);
+    const set = activityListeners.get(channelId) ?? new Set();
+    set.add(listener);
+    activityListeners.set(channelId, set);
+    return () => {
+      set.delete(listener);
+      if (!set.size) activityListeners.delete(channelId);
+    };
+  }
   function publish(channelIds?: ReadonlySet<string>) {
     if (closed) return;
     const changed: string[] = [];
+    const changedActivity: string[] = [];
     for (const [key, old] of snapshots) {
       if (channelIds && !channelIds.has(old.target.channelId)) continue;
       // Revisit dormant selectors lazily, retaining identity if unchanged.
@@ -273,9 +416,24 @@ export function createUnread({
         changed.push(key);
       }
     }
+    for (const [channelId, old] of activitySnapshots) {
+      if (channelIds && !channelIds.has(channelId)) continue;
+      if (!activityListeners.has(channelId)) {
+        activityDirty.add(channelId);
+        continue;
+      }
+      const next = computeActivity(channelId);
+      if (!equalActivity(old, next)) {
+        activitySnapshots.set(channelId, next);
+        changedActivity.push(channelId);
+      }
+    }
     // Replace/invalidate ALL affected projections before any reentrant callback.
     for (const key of changed)
       for (const listener of listeners.get(key) ?? []) notify(listener);
+    for (const channelId of changedActivity)
+      for (const listener of activityListeners.get(channelId) ?? [])
+        notify(listener);
   }
   const stopRead = reads.subscribe(publish);
   function purge() {
@@ -476,6 +634,8 @@ export function createUnread({
         if (!set.size) listeners.delete(key);
       };
     },
+    activity,
+    subscribeActivity: addActivityListener,
     sync: reads.snapshot,
     subscribeSync: reads.subscribe,
     ensure: () => refresh ?? (requested ? Promise.resolve() : repair()),
@@ -610,6 +770,9 @@ export function createUnread({
       listeners.clear();
       snapshots.clear();
       dirty.clear();
+      activityListeners.clear();
+      activitySnapshots.clear();
+      activityDirty.clear();
       events.clear();
       reads.dispose();
     },
