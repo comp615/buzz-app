@@ -74,20 +74,23 @@ could hide unseen siblings. Oversized rows that never fit fully are not auto-rea
 
 The sidebar separates ordinary unread from directed attention. Any unread state,
 including activity that exists only in a relevant thread, strengthens the channel
-label. Ordinary channel unread uses a quiet dot; DMs keep the stronger count badge
-and participant avatar. Non-DM thread activity uses a distinct dot whose
-hover/focus/click popover groups unread replies by canonical thread root and opens
-the existing thread panel; merely revealing the popover does not acknowledge a
-reply. A local manual-unread mark replaces any displayed count with a dot and a
-local-only label; the underlying observed count remains available.
+label. Ordinary unread renders no row marker. DMs, mentions, broadcasts, and
+relevant thread replies add one accent dot; non-DM row numerals are omitted and DM
+avatars are reserved for promoted offscreen cues. Thread activity reuses that dot:
+its hover/focus/click popover groups unread replies by canonical thread root and
+opens the existing thread panel, so overlapping priority and thread activity never
+produce duplicate dots. Merely revealing the popover does not acknowledge a reply.
+A local manual-unread mark strengthens the label without fabricating priority; the
+underlying observed count remains available.
 Conversation options exposes explicit actions and Unread status/retry. Unknown and
-observed-zero both omit a badge; the API preserves the distinction. There is no
-notification, feed, or exact-count service here.
+observed-zero both omit unread styling; the API preserves the distinction. There is
+no notification, feed, or exact-count service here.
 
-When unread rows are outside the sidebar's scroll viewport, floating “N unread”
-buttons count distinct destinations in that direction and reveal the nearest one.
-Ordinary destinations use a quiet treatment; any DM, mention, broadcast, or
-relevant thread destination promotes the same composition to primary. Thread-only
+When unread rows are outside the sidebar's scroll viewport, floating “Unread”
+buttons reveal the nearest destination in that direction without exposing a count.
+The internal directional set is still deduplicated by destination for geometry and
+priority: ordinary destinations use a quiet treatment; any DM, mention, broadcast,
+or relevant thread destination promotes the same composition to primary. Thread-only
 rows participate, and DMs remain promoted even when their only evidence is thread
 activity. The controls measure existing rendered badges/dots—no extra unread
 subscriptions or relay reads just to show them. Search-filtered rows do not
@@ -95,7 +98,8 @@ participate. Collapsed sections use the summary's position and expand when revea
 A partly visible row is not outside the fold. Activation scrolls and focuses the
 row, retaining its ordinary focus preparation; it does not select the channel or
 acknowledge any messages. The count is destinations, not a potentially misleading
-aggregate message total.
+aggregate message total. Directional destination counts remain internal and are
+not rendered or announced by the control.
 
 Thread buttons keep the summary's total reply count and add a dot when the shared
 thread selector has observed unread replies or explicit thread-unread intent.

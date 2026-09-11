@@ -344,57 +344,34 @@
   border-bottom: 1px solid var(--border);
 }
 
-.channelLabel:has(~ .unreadBadge),
+.channelLabel:has(~ .unreadState),
 .channelLabel:has(~ .threadActivityDot) {
   color: var(--text);
   font-weight: 650;
 }
-.unreadAvatar {
-  margin-inline-start: auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  font-size: 8px;
+.unreadState {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
-.unreadBadge {
+.priorityDot,
+.threadActivityDot {
+  display: block;
   margin-inline-start: auto;
   flex-shrink: 0;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-muted);
-  font-size: 0;
-}
-.unreadAvatar + .unreadBadge {
-  margin-inline-start: 0;
-}
-.unreadBadge[data-attention="true"] {
-  display: grid;
-  place-items: center;
-  width: auto;
-  height: auto;
-  min-width: 1.25rem;
-  padding: 0 0.35rem;
-  border-radius: 1rem;
   background: var(--primary);
-  color: var(--on-primary);
-  font-size: 0.75rem;
-  font-weight: 650;
-  text-align: center;
 }
 .threadActivityDot {
-  margin-inline-start: auto;
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--primary);
-}
-.unreadAvatar ~ .threadActivityDot {
-  margin-inline-start: 0;
-}
-.threadActivityDot[data-with-unread="true"] {
-  margin-inline-start: 0;
+  cursor: help;
 }
 .activityPopover {
   z-index: 20;

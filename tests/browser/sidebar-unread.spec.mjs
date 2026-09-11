@@ -119,23 +119,37 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   } finally {
     app.relay.releaseEose("alpha");
   }
-  const ordinary = row(page, "alpha").getByRole("img", {
-    name: /observed unread messages/,
-  });
-  const directed = row(page, "dm-090").getByRole("img");
-  await expect(ordinary).toHaveAttribute("data-attention", "false");
-  await expect(ordinary).toHaveText("");
-  await expect(ordinary).toHaveCSS("width", "6px");
-  await expect(row(page, "alpha").locator("span").first()).toHaveCSS(
+  const ordinary = row(page, "alpha");
+  const ordinaryState = ordinary.locator("[data-channel-unread]");
+  const directed = row(page, "dm-090").locator("[data-channel-priority]");
+  await expect(ordinaryState).toHaveAttribute("data-priority", "false");
+  await expect(ordinaryState).toHaveAttribute(
+    "aria-label",
+    /observed unread messages/,
+  );
+  await expect(ordinary.locator("[data-channel-priority]")).toHaveCount(0);
+  await expect(ordinary.locator("span").first()).toHaveCSS(
     "font-weight",
     "650",
   );
-  await expect(directed).toHaveAttribute("data-attention", "true");
-  await expect(directed).toHaveText("1");
-  await expect(directed).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(directed).toBeVisible();
+  await expect(directed).toHaveCSS("width", "6px");
+  await expect(
+    row(page, "dm-090").locator("[data-channel-unread]"),
+  ).toHaveAttribute("data-priority", "true");
+  await expect(
+    row(page, "dm-090").locator("[data-channel-dm-avatar]"),
+  ).toHaveCount(0);
   await expect(row(page, "dm-090").getByRole("img")).toHaveCount(1);
+  await page.evaluate(() => {
+    document.documentElement.dataset.colorMode = "dark";
+  });
+  await sidebar(page).screenshot({
+    path: info.outputPath("sidebar-unread-hierarchy.png"),
+  });
   await expect(cue(page, "below")).toBeVisible();
-  await expect(cue(page, "below")).toHaveText("2 unread");
+  await expect(cue(page, "below")).toHaveText("Unread");
+  await expect(cue(page, "below")).toHaveAccessibleName("Unread below");
   await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
   await expect(cue(page, "above")).toHaveCount(0);
   // Keep actionable DMs below while moving only ordinary unread above: priority
@@ -143,7 +157,8 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   await scrollRowAbove(page, "alpha");
   await expect.poll(() => inView(page, "alpha")).toBe(false);
   await expect(cue(page, "above")).toBeVisible();
-  await expect(cue(page, "above")).toHaveText("1 unread");
+  await expect(cue(page, "above")).toHaveText("Unread");
+  await expect(cue(page, "above")).toHaveAccessibleName("Unread above");
   await expect(cue(page, "above")).toHaveAttribute("data-attention", "false");
   await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
   await scroll(page, 0);
@@ -333,43 +348,36 @@ test("session changes discard the previous sidebar targets and manual unread sti
     await cue(page, "above").click();
     await expect.poll(() => inView(page, "alpha")).toBe(true);
     await expect(
-      row(page, "alpha").getByRole("img", {
-        name: "Marked unread on this device only",
-        exact: true,
-      }),
-    ).toBeVisible();
+      row(page, "alpha").locator(
+        '[data-channel-unread][data-priority="false"]',
+      ),
+    ).toBeAttached();
   } finally {
     release();
     await page.unroute("**/api/relay/secondary/sidebar-preferences");
   }
 });
 
-test("DM attention badge uses semantic primary colors in both modes", async ({
+test("priority dots use semantic primary color in both modes", async ({
   page,
   app,
 }) => {
   await open(page, app);
-  const badge = row(page, "dm-030").locator("[data-channel-unread]");
-  await expect(badge).toHaveAttribute("data-attention", "true");
+  const dot = row(page, "dm-030").locator("[data-channel-priority]");
+  await expect(dot).toBeAttached();
   for (const mode of ["light", "dark"]) {
     await page.evaluate((mode) => {
       document.documentElement.dataset.colorMode = mode;
     }, mode);
-    const colors = await page.evaluate(() => {
+    const primary = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
       const probe = document.createElement("span");
       probe.style.backgroundColor = root.getPropertyValue("--primary");
-      probe.style.color = root.getPropertyValue("--on-primary");
       document.body.append(probe);
-      const style = getComputedStyle(probe);
-      const colors = {
-        primary: style.backgroundColor,
-        onPrimary: style.color,
-      };
+      const color = getComputedStyle(probe).backgroundColor;
       probe.remove();
-      return colors;
+      return color;
     });
-    await expect(badge).toHaveCSS("background-color", colors.primary);
-    await expect(badge).toHaveCSS("color", colors.onPrimary);
+    await expect(dot).toHaveCSS("background-color", primary);
   }
 });

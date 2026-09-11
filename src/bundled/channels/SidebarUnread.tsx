@@ -143,12 +143,12 @@ export function SidebarUnread({
             className={styles.unreadEdge}
             data-edge={edge}
             title={`Reveal the nearest unread channel ${edge} without opening it`}
-            aria-label={`${edges[edge].length} unread ${edge}`}
+            aria-label={`Unread ${edge}`}
             data-attention={edges[edge].some(({ attention }) => attention)}
             onClick={() => reveal(edge)}
           >
             <Icon size={15} aria-hidden="true" />
-            {edges[edge].length} unread
+            Unread
           </button>
         );
       })}
