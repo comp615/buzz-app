@@ -41,9 +41,18 @@ test("thread buttons show observed unread independently, clear only after readin
   const activity = alpha.getByRole("img", { name: /unread threads?/ });
   await expect(activity).toBeVisible();
   await expect(alpha.locator("span").first()).toHaveCSS("font-weight", "650");
+  await page.evaluate(() => {
+    document.documentElement.dataset.colorMode = "dark";
+  });
   await alpha.hover();
   const popover = page.getByRole("dialog", { name: "Activity in Alpha" });
   await expect(popover).toBeVisible();
+  await expect(
+    popover.getByText("Activity in Alpha", { exact: true }),
+  ).toHaveCount(0);
+  await popover.screenshot({
+    path: testInfo.outputPath("activity-popover.png"),
+  });
   await expect(
     popover.getByRole("button", { name: /Open unread thread from/ }),
   ).toHaveCount(1);

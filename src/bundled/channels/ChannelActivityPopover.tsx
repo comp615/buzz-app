@@ -123,10 +123,10 @@ export function ChannelActivityPopover({
           sideOffset={6}
           collisionPadding={8}
         >
-          <Popover.Popup className={styles.activityPopover}>
-            <Popover.Title className={styles.activityHeading}>
-              Activity in {channelName}
-            </Popover.Title>
+          <Popover.Popup
+            className={styles.activityPopover}
+            aria-label={`Activity in ${channelName}`}
+          >
             {stale && (
               <p className={styles.activityStale}>May be out of date</p>
             )}

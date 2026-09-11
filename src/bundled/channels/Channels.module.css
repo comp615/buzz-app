@@ -396,14 +396,6 @@
   opacity: 0;
   transform: scale(0.98);
 }
-.activityHeading {
-  margin: 0;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: calc(14px * var(--buzz-text-scale, 1));
-  line-height: 20px;
-  font-weight: 600;
-}
 .activityStale {
   margin: 0;
   padding: 6px 12px;
