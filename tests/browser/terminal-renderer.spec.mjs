@@ -288,10 +288,15 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     // Pointer focus is quiet; keyboard navigation paints the actual control.
     await button("Enlarge text").click();
     await expect(restart).toHaveCSS("font-size", "21px");
+    // Keep close pending until the busy-state assertions finish; a timed close
+    // can re-enable Restart before a slower browser observes its disabled style.
+    await page.evaluate(() => window.terminalPanel.holdClose());
     await restart.click();
     await expect(restart).toBeDisabled();
     await expectToken(restart, "color", "--text-disabled");
     await expect(restart).toHaveCSS("outline-style", "none");
+    await page.evaluate(() => window.terminalPanel.releaseClose());
+    await expect(restart).toBeEnabled();
     await expect(drawer.locator(".xterm-rows")).toContainText(
       "FIXTURE_SHELL_READY",
     );
