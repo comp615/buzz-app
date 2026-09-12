@@ -205,6 +205,7 @@ export const test = base.extend({
             [
               ["h", "alpha"],
               ["e", root.id.toUpperCase(), "", "reply"],
+              ["p", viewer],
             ],
             `Unread reply ${index}`,
             peerKey,

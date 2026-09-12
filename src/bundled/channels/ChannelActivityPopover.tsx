@@ -44,7 +44,7 @@ function ActivityRow({
     <button
       type="button"
       className={styles.activityItem}
-      aria-label={`Open unread thread from ${name}`}
+      aria-label={`Open unread thread from ${name}: ${item.preview}`}
       onClick={() => onOpen(item)}
     >
       <Avatar

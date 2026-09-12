@@ -64,7 +64,18 @@ test("thread buttons show observed unread independently, clear only after readin
   });
   await expect(
     popover.getByRole("button", { name: /Open unread thread from/ }),
-  ).toHaveCount(1);
+  ).toHaveCount(2);
+  const activityNames = await popover
+    .getByRole("button", { name: /Open unread thread from/ })
+    .evaluateAll((items) =>
+      items.map((item) => item.getAttribute("aria-label")),
+    );
+  expect(new Set(activityNames)).toEqual(
+    new Set([
+      "Open unread thread from Someone: Unread reply 0",
+      "Open unread thread from Someone: Unread reply 1",
+    ]),
+  );
   const queries = () =>
     app.report.queries.filter(({ filter }) => filter.depth_limit);
   expect(queries()).toHaveLength(0); // Merely displaying buttons never fetches threads.
