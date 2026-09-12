@@ -711,6 +711,9 @@ button.avatar:focus-visible,
 .typing {
   color: var(--text-muted);
   font-size: calc(12px * var(--buzz-text-scale, 1));
+  line-height: 1.5;
+  height: 1lh;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

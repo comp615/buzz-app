@@ -24,17 +24,20 @@ export function TypingIndicator({
     (entry) =>
       entry.channelId === channelId && entry.threadRootId === threadRootId,
   );
-  if (!matching.length) return null;
   // Reuse already available names; optional typing must not trigger profile reads.
   const names = matching
     .slice(0, 3)
     .map(({ pubkey }) => profiles.get(pubkey)?.name ?? pubkey.slice(0, 10));
   const others = matching.length - names.length;
   return (
-    <div className={styles.typing} role="status" aria-label="Typing activity">
-      {names.join(", ")}
-      {others > 0 ? ` and ${others} others` : ""}
-      {matching.length === 1 ? " is typing…" : " are typing…"}
+    <div className={styles.typing}>
+      {matching.length > 0 && (
+        <span role="status" aria-label="Typing activity">
+          {names.join(", ")}
+          {others > 0 ? ` and ${others} others` : ""}
+          {matching.length === 1 ? " is typing…" : " are typing…"}
+        </span>
+      )}
     </div>
   );
 }

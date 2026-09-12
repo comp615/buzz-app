@@ -122,6 +122,39 @@ it("messages win a batch, suppress late pulses for two seconds and retain timest
   vi.advanceTimersByTime(8000);
   expect(snapshot()).toEqual([]);
 });
+for (const kind of [9, 40002]) {
+  it(`kind ${kind} quiet suppression remembers replayed pulses without deferring activity or extending quiet`, () => {
+    const { owner, snapshot } = setup();
+    owner.accept([
+      signed(agent, {
+        kind,
+        tags: [["h", "a"]],
+        content: "complete",
+        created_at: epoch,
+      }),
+    ]);
+    vi.advanceTimersByTime(1000);
+    const suppressed = pulse(undefined, epoch + 1);
+    owner.accept([suppressed], true);
+    expect(snapshot()).toEqual([]);
+    vi.advanceTimersByTime(1000);
+    expect(snapshot()).toEqual([]); // Quiet ending never reveals a dropped pulse.
+    owner.accept([suppressed], true);
+    expect(snapshot()).toEqual([]);
+    // Suppression did not move the original two-second quiet deadline.
+    owner.accept([pulse(undefined, epoch + 2)], true);
+    expect(snapshot()).toHaveLength(1);
+    vi.advanceTimersByTime(1000);
+    owner.accept([suppressed], true);
+    expect(snapshot()).toHaveLength(1);
+    vi.advanceTimersByTime(6999);
+    expect(snapshot()).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(snapshot()).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+}
+
 it("message suppression is signer/thread scoped and clears only older activity", () => {
   const { owner, snapshot } = setup();
   const tags = [

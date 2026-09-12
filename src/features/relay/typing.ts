@@ -70,8 +70,9 @@ export function createTyping(
     now: number,
   ) {
     if (at <= record.lastActivityAt || at <= record.lastMessageAt) return;
-    if (now < record.quietUntil) return;
+    // Remember suppressed pulses too: quiet ending must not admit their replays.
     record.lastActivityAt = at;
+    if (now < record.quietUntil) return;
     record.visibleUntil = at + ACTIVITY_LIFETIME_MS;
   }
   function recordCompletion(
