@@ -266,7 +266,11 @@ cursor responses for explicit paging tests; accidentally entering that path is n
 valid resize setup. `upper()` establishes above-bottom reading with at most four
 real wheel gestures, requiring progress and settled distance >400px. It does not
 measure exact wheel displacement. Partial-input and blocked-input controls guard
-that setup; same-ID/Y <4px and bottom <4px assertions remain unchanged. No retries
+that setup; same-ID/Y <4px and bottom <4px assertions remain unchanged. Anchor
+capture prefers a whole paragraph, falling back to the first intersecting row
+when tall messages leave only clipped paragraphs. A deterministic helper control
+covers that geometry, whole-paragraph preference, offscreen rejection, and rejection
+of an actual anchor displacement. No retries
 or additional WebKit exclusions are used. The underlying Linux WebKit single-wheel
 shortfall remains unattributed; this setup change does not fix or explain it.
 

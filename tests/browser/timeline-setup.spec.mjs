@@ -1,5 +1,5 @@
 import { test, expect } from "./fixture.mjs";
-import { open, upper, expectAnchor } from "./timeline.mjs";
+import { open, upper, anchor, expectAnchor } from "./timeline.mjs";
 
 // Reading setup must not accidentally exercise older-page loading.
 test.use({ tallMessages: true });
@@ -33,6 +33,49 @@ test("reading setup handles partial wheel progress without weakening the anchor"
   } finally {
     page.mouse.wheel = wheel;
   }
+});
+
+test("reading anchor handles clipped paragraphs and still detects displacement", async ({
+  page,
+}) => {
+  // Deterministic geometry from the CI failure: both visible paragraphs are
+  // clipped, with no whole paragraph to select. This is a helper control, not
+  // a replacement for the production resize journeys.
+  await page.setContent(`
+    <section role="region" aria-label="Channel message history"
+      style="position:fixed;top:100px;height:200px;width:400px;overflow:hidden">
+      <div data-message-id="above" style="position:absolute;top:-100px">
+        <p style="margin:0;height:50px">Offscreen</p>
+      </div>
+      <div data-message-id="clipped" style="position:absolute;top:-30px">
+        <p style="margin:0;height:150px">Clipped at top</p>
+      </div>
+      <div data-message-id="next" style="position:absolute;top:130px">
+        <p style="margin:0;height:150px">Clipped at bottom</p>
+      </div>
+    </section>
+  `);
+  const saved = await anchor(page);
+  expect(saved).toEqual({ id: "clipped", y: -30 });
+  await expectAnchor(page, saved);
+  await page.locator('[data-message-id="clipped"]').evaluate((row) => {
+    row.style.top = "-10px";
+  });
+  expect(await anchor(page)).toEqual({ id: saved.id, y: saved.y + 20 });
+  // The unchanged oracle must reject a real jump, not merely find the same ID.
+  await expect(expectAnchor(page, saved)).rejects.toThrow(
+    "same visible message clipped at same viewport Y",
+  );
+  await page.locator('[data-message-id="next"] p').evaluate((p) => {
+    p.style.height = "40px";
+  });
+  expect(await anchor(page)).toEqual({ id: "next", y: 130 });
+  await history(page)
+    .locator("[data-message-id]")
+    .evaluateAll((rows) => {
+      for (const row of rows) row.style.top = "300px";
+    });
+  await expect(anchor(page)).rejects.toThrow("No visible message anchor");
 });
 
 test("reading setup rejects an immobile timeline instead of accepting a bottom anchor", async ({

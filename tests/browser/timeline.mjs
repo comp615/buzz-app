@@ -34,13 +34,20 @@ export async function settle(page) {
 export async function anchor(page) {
   return history(page).evaluate((element) => {
     const bounds = element.getBoundingClientRect();
-    const row = Array.from(element.querySelectorAll("[data-message-id]")).find(
-      (row) => {
+    const rows = Array.from(element.querySelectorAll("[data-message-id]"));
+    // Prefer a whole paragraph, but tall messages can leave only clipped rows.
+    // Track the first intersecting row in that case, as the reader does. The
+    // same-ID/Y assertion below still detects displacement after a resize.
+    const row =
+      rows.find((row) => {
         const rect = row.querySelector("p").getBoundingClientRect();
         return rect.top >= bounds.top && rect.bottom <= bounds.bottom;
-      },
-    );
-    if (!row) throw new Error("No fully visible message anchor");
+      }) ??
+      rows.find((row) => {
+        const rect = row.getBoundingClientRect();
+        return rect.bottom > bounds.top && rect.top < bounds.bottom;
+      });
+    if (!row) throw new Error("No visible message anchor");
     return {
       id: row.dataset.messageId,
       y: row.querySelector("p").getBoundingClientRect().top - bounds.top,
