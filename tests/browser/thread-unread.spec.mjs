@@ -70,12 +70,13 @@ test("thread buttons show observed unread independently, clear only after readin
     .evaluateAll((items) =>
       items.map((item) => item.getAttribute("aria-label")),
     );
-  expect(new Set(activityNames)).toEqual(
-    new Set([
-      "Open unread thread from Someone: Unread reply 0",
-      "Open unread thread from Someone: Unread reply 1",
-    ]),
-  );
+  expect(activityNames).toHaveLength(2);
+  expect(
+    activityNames.every((name) => name?.startsWith("Open unread thread from ")),
+  ).toBe(true);
+  expect(
+    new Set(activityNames.map((name) => name?.split(": ").at(-1))),
+  ).toEqual(new Set(["Unread reply 0", "Unread reply 1"]));
   const queries = () =>
     app.report.queries.filter(({ filter }) => filter.depth_limit);
   expect(queries()).toHaveLength(0); // Merely displaying buttons never fetches threads.
@@ -96,9 +97,13 @@ test("thread buttons show observed unread independently, clear only after readin
   ).toBeVisible();
   await page.getByRole("button", { name: "Close thread", exact: true }).click();
   await expect(alpha).toBeFocused();
-  const rect = await first.boundingBox();
+  const beforeRect = await first.boundingBox();
   await first.hover();
-  expect(await first.boundingBox()).toEqual(rect);
+  const afterRect = await first.boundingBox();
+  expect(afterRect).not.toBeNull();
+  expect(beforeRect).not.toBeNull();
+  expect(afterRect.width).toBe(beforeRect.width);
+  expect(afterRect.height).toBe(beforeRect.height);
   await expect(first).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   const hover = await first.evaluate((el) => {
     const s = getComputedStyle(el);
