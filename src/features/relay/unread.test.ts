@@ -7,6 +7,7 @@ import {
   type ReadStateStorage,
 } from "./read-state-storage";
 import type { RelayEvent } from "./events";
+import type { ThreadActivitySnapshot } from "./unread";
 import type { ChannelStoreOptions } from "./store";
 import type { SavedHead } from "./persistence";
 import type { ReadStateSigning } from "./read-state-host";
@@ -423,6 +424,46 @@ it("groups unread thread activity by same-channel root and clears one item witho
   expect(h.snapshot()).toMatchObject({
     observedCount: 2,
     manual: "local-only",
+  });
+});
+
+it("activity previews use edited and unwrapped current message content and notify subscribers", () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([root, reply]);
+  const before = h.session.unread.activity("room");
+  const changes: ThreadActivitySnapshot[] = [];
+  h.session.unread.subscribeActivity("room", () =>
+    changes.push(h.session.unread.activity("room")),
+  );
+  h.emit([
+    signed(h.alice, {
+      kind: 40003,
+      content: "EDITED",
+      tags: [["e", reply.id]],
+    }),
+  ]);
+  expect(h.session.unread.activity("room")).not.toBe(before);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe("EDITED");
+  expect(changes.at(-1)?.items?.[0]?.preview).toBe("EDITED");
+
+  const agentReply = signed(h.alice, {
+    kind: 40002,
+    content: JSON.stringify({ content: "unwrapped hello" }),
+    tags: [
+      ["h", "room"],
+      ["e", root.id, "", "reply"],
+    ],
+    created_at: 12,
+  });
+  h.emit([agentReply]);
+  expect(h.session.unread.activity("room").items?.[0]).toMatchObject({
+    latestMessageId: agentReply.id,
+    preview: "unwrapped hello",
   });
 });
 

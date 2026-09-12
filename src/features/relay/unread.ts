@@ -12,6 +12,7 @@ import type {
   ReadSyncSnapshot,
 } from "./read-state";
 import type { Priority, RelayReader } from "./reader";
+import { foldMessages } from "./fold";
 import { threadReference } from "./thread-reference";
 
 export type UnreadSnapshot = Readonly<{
@@ -286,6 +287,11 @@ export function createUnread({
     indexEvidence();
     const state = reads.state();
     const grouped = new Map<string, ThreadActivityItem>();
+    const presented = new Map(
+      foldMessages(channelId, "", [...events.values()], {
+        includeReplies: true,
+      }).map((message) => [message.id, message.content]),
+    );
     for (const evidence of byChannel.get(channelId) ?? []) {
       const { event, rootId, mentioned } = evidence;
       const broadcast = event.tags.some(
@@ -298,6 +304,7 @@ export function createUnread({
       )
         continue;
       const current = grouped.get(rootId);
+      const preview = presented.get(event.id) ?? event.content;
       if (!current) {
         grouped.set(
           rootId,
@@ -307,7 +314,7 @@ export function createUnread({
             latestMessageId: event.id,
             authorId: event.pubkey,
             createdAt: event.created_at,
-            preview: event.content,
+            preview,
             unreadCount: 1,
           }),
         );
@@ -325,7 +332,7 @@ export function createUnread({
           latestMessageId: latest ? event.id : current.latestMessageId,
           authorId: latest ? event.pubkey : current.authorId,
           createdAt: latest ? event.created_at : current.createdAt,
-          preview: latest ? event.content : current.preview,
+          preview: latest ? preview : current.preview,
           unreadCount: current.unreadCount + 1,
         }),
       );
@@ -360,6 +367,9 @@ export function createUnread({
           return (
             item.rootId === other?.rootId &&
             item.latestMessageId === other.latestMessageId &&
+            item.authorId === other.authorId &&
+            item.createdAt === other.createdAt &&
+            item.preview === other.preview &&
             item.unreadCount === other.unreadCount
           );
         })));
@@ -553,7 +563,10 @@ export function createUnread({
     indexed = false;
     const incoming = new Map(batch.map((event) => [event.id, event]));
     for (const event of batch) {
-      if (![9, 40002, 5, 9005].includes(event.kind) || events.has(event.id))
+      if (
+        ![9, 40002, 40003, 5, 9005].includes(event.kind) ||
+        events.has(event.id)
+      )
         continue;
       const channel =
         channelOf(event) ??
