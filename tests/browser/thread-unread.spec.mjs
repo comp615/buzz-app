@@ -41,6 +41,15 @@ test("thread buttons show observed unread independently, clear only after readin
   const activity = alpha.getByRole("img", { name: /unread threads?/ });
   await expect(activity).toBeVisible();
   await expect(alpha.locator("span").first()).toHaveCSS("font-weight", "650");
+  await page.getByLabel("Conversation options", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Mark unread on this device", exact: true })
+    .click();
+  await page.getByLabel("Conversation options", { exact: true }).click();
+  await expect(
+    alpha.getByRole("img", { name: /Marked unread on this device only/ }),
+  ).toBeAttached();
+  await expect(activity).toHaveAccessibleName(/unread threads?/);
   await page.evaluate(() => {
     document.documentElement.dataset.colorMode = "dark";
   });
