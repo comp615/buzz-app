@@ -72,6 +72,44 @@ const channelOf = (event: RelayEvent) => {
   const tags = event.tags.filter(([name]) => name === "h");
   return tags.length === 1 ? tags[0]?.[1] : undefined;
 };
+const auxiliaryKind = (event: RelayEvent) =>
+  event.kind === 40003 || event.kind === 5 || event.kind === 9005;
+/** Resolve every owning channel through bounded reference-only auxiliary ancestry.
+ * A missing target, cycle, or unsupported intermediary fails closed. */
+function channelOwnership(find: (id: string) => RelayEvent | undefined) {
+  const memo = new Map<string, ReadonlySet<string> | undefined>();
+  const visiting = new Set<string>();
+  function owners(event: RelayEvent): ReadonlySet<string> | undefined {
+    if (memo.has(event.id)) return memo.get(event.id);
+    if (visiting.has(event.id) || visiting.size >= 32) return;
+    visiting.add(event.id);
+    const direct = channelOf(event);
+    let resolved: Set<string> | undefined;
+    if (contentKind(event)) {
+      if (direct) resolved = new Set([direct]);
+    } else if (auxiliaryKind(event)) {
+      resolved = direct ? new Set([direct]) : new Set();
+      const targets = event.tags.flatMap(([name, id]) =>
+        name === "e" && id ? [id] : [],
+      );
+      if (!direct && !targets.length) resolved = undefined;
+      for (const id of targets) {
+        const target = find(id);
+        const inherited = target && owners(target);
+        if (!inherited) {
+          resolved = undefined;
+          break;
+        }
+        for (const channel of inherited) resolved?.add(channel);
+      }
+      if (!resolved?.size) resolved = undefined;
+    }
+    visiting.delete(event.id);
+    memo.set(event.id, resolved);
+    return resolved;
+  }
+  return owners;
+}
 /** Bounded verified evidence and one projection; no sidebar counters, sockets or implicit reads. */
 export function createUnread({
   reads,
@@ -451,22 +489,11 @@ export function createUnread({
     epoch++;
     const denied = new Set([...known].filter((channel) => !allowed(channel)));
     for (const channel of denied) known.delete(channel);
-    for (const [id, event] of events) {
-      const channel = channelOf(event);
-      if (
-        channel
-          ? !allowed(channel)
-          : !event.tags.some(
-              ([name, value]) =>
-                name === "e" &&
-                value &&
-                (() => {
-                  const target = events.get(value);
-                  const owner = target && channelOf(target);
-                  return owner && allowed(owner);
-                })(),
-            )
-      )
+    const retained = new Map(events);
+    const owners = channelOwnership((targetId) => retained.get(targetId));
+    for (const [id, event] of retained) {
+      const channels = owners(event);
+      if (!channels || [...channels].some((channel) => !allowed(channel)))
         events.delete(id);
     }
     indexed = false;
@@ -562,22 +589,16 @@ export function createUnread({
     const changed = new Set<string>();
     indexed = false;
     const incoming = new Map(batch.map((event) => [event.id, event]));
+    const owners = channelOwnership((id) => incoming.get(id) ?? events.get(id));
     for (const event of batch) {
       if (
         ![9, 40002, 40003, 5, 9005].includes(event.kind) ||
         events.has(event.id)
       )
         continue;
-      const channel =
-        channelOf(event) ??
-        event.tags
-          .flatMap(([name, value]) =>
-            name === "e" && value
-              ? [channelOf(incoming.get(value) ?? events.get(value) ?? event)]
-              : [],
-          )
-          .find(Boolean);
-      if (!channel || !allowed(channel)) continue;
+      const channels = owners(event);
+      if (!channels || [...channels].some((channel) => !allowed(channel)))
+        continue;
       const size = new TextEncoder().encode(JSON.stringify(event)).byteLength;
       if (events.size >= 4096 || bytes + size > 8 * 1024 * 1024) {
         events.clear();
@@ -590,17 +611,12 @@ export function createUnread({
       }
       events.set(event.id, event);
       bytes += size;
-      known.add(channel);
-      changed.add(channel);
-      // A signed deletion may target readable messages in several channels.
-      // Invalidate every affected projection, not only its explicit/first owner.
-      if (event.kind === 5 || event.kind === 9005)
-        for (const [name, id] of event.tags) {
-          const target =
-            name === "e" && id && (incoming.get(id) ?? events.get(id));
-          const affected = target && channelOf(target);
-          if (affected) changed.add(affected);
-        }
+      for (const channel of channels) {
+        known.add(channel);
+        changed.add(channel);
+      }
+      // The recursively resolved owner set already includes every activity
+      // projection affected by a deletion, including delete-of-edit chains.
     }
     if (changed.size) {
       const global = freshness !== "observed";

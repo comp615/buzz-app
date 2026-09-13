@@ -467,6 +467,71 @@ it("activity previews use edited and unwrapped current message content and notif
   });
 });
 
+it("activity subscribers restore original content when a reference-only edit is deleted", () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  const edit = signed(h.alice, {
+    kind: 40003,
+    content: "EDITED",
+    tags: [["e", reply.id]],
+  });
+  const deletion = signed(h.alice, {
+    kind: 5,
+    content: "",
+    tags: [["e", edit.id]],
+  });
+  h.emit([root, reply]);
+  const changes: ThreadActivitySnapshot[] = [];
+  h.session.unread.subscribeActivity("room", () =>
+    changes.push(h.session.unread.activity("room")),
+  );
+
+  h.emit([edit]);
+  expect(changes.at(-1)?.items?.[0]?.preview).toBe("EDITED");
+  h.emit([deletion]);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe(
+    "ORIGINAL",
+  );
+  expect(changes.map((snapshot) => snapshot.items?.[0]?.preview)).toEqual([
+    "EDITED",
+    "ORIGINAL",
+  ]);
+});
+
+it("deletion-before-edit batches retain authorized ancestry without a transient activity change", () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  const edit = signed(h.alice, {
+    kind: 40003,
+    content: "EDITED",
+    tags: [["e", reply.id]],
+  });
+  const deletion = signed(h.alice, {
+    kind: 5,
+    content: "",
+    tags: [["e", edit.id]],
+  });
+  h.emit([root, reply]);
+  const before = h.session.unread.activity("room");
+  const changed = vi.fn();
+  h.session.unread.subscribeActivity("room", changed);
+
+  h.emit([deletion, edit]);
+  expect(h.session.unread.activity("room")).toBe(before);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe(
+    "ORIGINAL",
+  );
+  expect(changed).not.toHaveBeenCalled();
+});
+
 it("resolves every activity item through its own channel hierarchy", () => {
   const h = setup();
   h.grant("room");
