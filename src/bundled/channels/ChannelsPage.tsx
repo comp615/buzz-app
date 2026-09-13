@@ -280,7 +280,7 @@ function ChannelWorkspace({
       setThread({ channelId, messageId: rootId });
       open(undefined);
     },
-    [navigate, sidebar.list],
+    [navigate, sidebar.list, open],
   );
   const closeThread = useCallback(() => {
     setThread(undefined);
